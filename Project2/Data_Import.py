@@ -4,11 +4,12 @@ Dependencies: numpy, scipy, matplotlib
 Install if needed: python -m pip install numpy scipy matplotlib
 
 Run this script in your Python IDE, or with:
-    python import_walking_data.py
+    python Data_Import.py
 
-Edit the settings below to choose a channel or plot interval. The full selected
-channel is available as `time_seconds` and `acceleration` after running in an IDE.
-Only one channel is loaded, because the complete MAT file is about 4.4 GB.
+Edit the settings below to choose channels or a plot interval. Each channel gets
+its own figure, saved as a PNG in outputs/time_domain next to this script.
+Full channel arrays are released after plotting each channel,
+because the complete MAT file is about 4.4 GB.
 """
 
 from pathlib import Path
@@ -20,11 +21,12 @@ from scipy.io import loadmat, whosmat
 
 
 # -------------------------- EDIT THESE SETTINGS ---------------------------
-MAT_FILE = Path(r"C:\Users\andro\Downloads\839WalkingExperiments.mat")
-CHANNEL = 1                         # Choose a channel from 1 to 20.
+MAT_FILE = Path(r"D:\839WalkingExperiments.mat")
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "time_domain"
+CHANNELS = range(1, 21)              # Plot all 20 channels.
 CONVERT_TO_MS2 = False               # False: g; True: m/s^2.
 PLOT_START_SECONDS = 0.0
-PLOT_END_SECONDS = 660.0              # Preview interval; full data stays loaded.
+PLOT_END_SECONDS = 660.0              # Plot interval in seconds.
 # -------------------------------------------------------------------------
 
 
@@ -32,7 +34,7 @@ def load_channel(mat_file, channel=1, convert_to_ms2=False):
     r"""Return (time_seconds, acceleration, metadata) for one complete channel.
 
     Example from another script or notebook in this folder:
-        from import_walking_data import load_channel
+        from Data_Import import load_channel
         t, a, info = load_channel(r"C:\path\839WalkingExperiments.mat", channel=3)
 
     The source file stores acceleration in g. Its sensitivity metadata is not
@@ -93,31 +95,41 @@ def load_channel(mat_file, channel=1, convert_to_ms2=False):
 
 
 if __name__ == "__main__":
-    time_seconds, acceleration, metadata = load_channel(
-        MAT_FILE, CHANNEL, convert_to_ms2=CONVERT_TO_MS2,
-    )
-    print(f"Loaded {metadata['variable_name']}")
-    print(f"Samples: {metadata['sample_count']:,}")
-    print(f"Sampling rate: {metadata['sampling_rate_hz']:g} Hz")
-    print(f"Time: {metadata['start_seconds']:.6f} to {metadata['end_seconds']:.6f} s")
-    print(f"Acceleration unit: {metadata['acceleration_unit']}")
-    print("Full arrays: time_seconds, acceleration")
-
-    # Slice only the plot. The imported arrays above retain every sample.
     if PLOT_END_SECONDS <= PLOT_START_SECONDS:
         raise ValueError("PLOT_END_SECONDS must be greater than PLOT_START_SECONDS.")
-    first = np.searchsorted(time_seconds, PLOT_START_SECONDS, side="left")
-    last = np.searchsorted(time_seconds, PLOT_END_SECONDS, side="right")
-    if last - first < 2:
-        raise ValueError("The selected plot interval contains fewer than two samples.")
 
-    fig, ax = plt.subplots(figsize=(11, 4.5), constrained_layout=True)
-    ax.plot(time_seconds[first:last], acceleration[first:last], linewidth=0.7)
-    ax.set(
-        xlabel="Time (s)",
-        ylabel=f"Acceleration ({metadata['acceleration_unit']})",
-        title=f"Walking experiment - Channel {CHANNEL}",
-        xlim=(PLOT_START_SECONDS, PLOT_END_SECONDS),
-    )
-    ax.grid(True, alpha=0.3)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    for channel in CHANNELS:
+        time_seconds, acceleration, metadata = load_channel(
+            MAT_FILE, channel, convert_to_ms2=CONVERT_TO_MS2,
+        )
+        print(f"Loaded {metadata['variable_name']}")
+        print(f"Samples: {metadata['sample_count']:,}")
+        print(f"Sampling rate: {metadata['sampling_rate_hz']:g} Hz")
+        print(f"Time: {metadata['start_seconds']:.6f} to {metadata['end_seconds']:.6f} s")
+        print(f"Acceleration unit: {metadata['acceleration_unit']}")
+
+        first = np.searchsorted(time_seconds, PLOT_START_SECONDS, side="left")
+        last = np.searchsorted(time_seconds, PLOT_END_SECONDS, side="right")
+        if last - first < 2:
+            raise ValueError(
+                f"Channel {channel}: the selected plot interval contains fewer than two samples."
+            )
+
+        fig, ax = plt.subplots(figsize=(11, 4.5), constrained_layout=True)
+        ax.plot(time_seconds[first:last], acceleration[first:last], linewidth=0.7)
+        ax.set(
+            xlabel="Time (s)",
+            ylabel=f"Acceleration ({metadata['acceleration_unit']})",
+            title=f"Walking experiment - Channel {channel}",
+            xlim=(PLOT_START_SECONDS, PLOT_END_SECONDS),
+        )
+        ax.grid(True, alpha=0.3)
+        output_path = OUTPUT_DIR / f"channel_{channel:02d}.png"
+        fig.savefig(output_path, dpi=300)
+        print(f"Saved plot: {output_path}")
+        del time_seconds, acceleration
+
+    # Display all figures together after every channel has been plotted.
     plt.show()
